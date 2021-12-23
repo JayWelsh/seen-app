@@ -105,7 +105,7 @@
           <div v-if="collectable.nft_contract_address && collectable.nft_token_id" class="text-3xl font-title font-bold text-center mb-6 mt-12">
             {{ isAuction ? "Recent bids" : "Recent buys" }}
           </div>
-          <list-of-buyers v-if="collectable.nft_contract_address && collectable.nft_token_id" :list="events"/>
+          <list-of-buyers v-if="collectable.nft_contract_address && collectable.nft_token_id" :list="events" :isAuction="isAuction"/>
 
           <template v-if="isAuction">
             <button class="button dark w-full mt-12" @click="openModal('video', 'https://www.youtube.com/watch?v=1G5caDyf-kA')">
@@ -223,7 +223,6 @@ import Faq from "@/views/collectable/components/FAQ.vue";
 import PartnersAndPress from "@/views/collectable/components/PartnersAndPress.vue";
 
 import useCollectableInformation from "@/hooks/useCollectableInformation.js";
-import useContractEvents from "@/hooks/useContractEvents";
 import {getEtherscanLink} from "@/services/utils";
 import GLightbox from 'glightbox';
 import 'glightbox/dist/css/glightbox.css';

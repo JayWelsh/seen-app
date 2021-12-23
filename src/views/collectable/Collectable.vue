@@ -17,6 +17,7 @@
     <container>
       <div class="flex items-center py-6 flex-col">
         <fenced-title
+            v-if="title?.length < 40"
             class="flex-grow mr-0 mb-2 self-stretch"
             color="fence-gray"
             :titleMonospace="titleMonospace"
@@ -24,9 +25,22 @@
             :closed="true"
         >{{ title }}
         </fenced-title>
+        
+        <unfenced-title
+          v-if="title?.length >= 40"
+          class="flex-grow mr-0 mb-2 self-stretch"
+          color="fence-gray"
+          :titleMonospace="titleMonospace"
+          textAlign="center"
+          :closed="true"
+          maxWidth="90%"
+        >
+          {{ title }}
+        </unfenced-title>
 
         <div class="status flex justify-center items-center mb-5">
           <user-badge
+                v-if="artist && artist.avatar"
                 type="light"
                 :url="artist.avatar"
                 :username="pillOverride ? pillOverride : artist.name"
@@ -93,10 +107,10 @@
             </div>
           </template>
 
-          <div class="text-4xl font-title font-bold mt-14 mb-6" :class="darkMode && 'dark-mode-text'">
+          <div v-if="artist" class="text-4xl font-title font-bold mt-14 mb-6" :class="darkMode && 'dark-mode-text'">
             Artist statement
           </div>
-          <artist-card class="shadow-md" :artist="artist" :artistStatement="artistStatement"/>
+          <artist-card v-if="artist" class="shadow-md" :artist="artist" :artistStatement="artistStatement"/>
         </div>
 
         <div class="right-side col-span-5">
@@ -105,10 +119,15 @@
               :status="liveStatus"
               :collectable="collectable"
               :startsAt="currentStartsAt"
+              :minimumStartsAt="currentMinimumStartsAt"
               :endsAt="currentEndsAt"
               :isAuction="isAuction"
               :numberOfBids="events.length"
               :isOpenEdition="isOpenEdition"
+              :isVRFSale="isVRFSale"
+              :hasRequestedVRF="hasRequestedVRF"
+              :hasFulfilledVRF="hasFulfilledVRF"
+              :hasCommittedVRF="hasCommittedVRF"
               :itemsBought="itemsBought"
               :edition="edition"
               :edition_of="edition_of"
@@ -129,7 +148,7 @@
           <div class="text-3xl font-title font-bold text-center mb-6 mt-12" :class="darkMode && 'dark-mode-text'">
             {{ isAuction ? "Recent bids" : "Recent buys" }}
           </div>
-          <list-of-buyers class="mb-12" :list="events"/>
+          <list-of-buyers class="mb-12" :list="events" :isAuction="isAuction"/>
 
           <template v-if="isAuction">
             <button class="button dark w-full" :class="darkMode && 'dark-mode-outline'" @click="openModal('video', 'https://www.youtube.com/watch?v=1G5caDyf-kA')">
@@ -181,12 +200,13 @@
 
 
 <script>
-import {computed, onBeforeUnmount, reactive, ref, watchEffect} from "vue";
+import {computed, reactive, ref, onUnmounted} from "vue";
 import {useRoute} from "vue-router";
 import {useMeta} from "vue-meta";
 import {useStore} from "vuex";
 
 import FencedTitle from "@/components/FencedTitle.vue";
+import UnfencedTitle from "@/components/UnfencedTitle.vue";
 import UserBadge from "@/components/PillsAndTags/UserBadge.vue";
 import LiveIndicator from "@/components/PillsAndTags/LiveIndicator.vue";
 import Tag from "@/components/PillsAndTags/Tag.vue";
@@ -198,13 +218,15 @@ import HeroGallery from "@/components/Media/HeroGallery.vue";
 import {CollectablesService} from "@/services/apiService";
 import {useToast} from "primevue/usetoast";
 
+import useDarkMode from "@/hooks/useDarkMode";
 import useCollectableInformation from "@/hooks/useCollectableInformation.js";
-import useContractEvents from "@/hooks/useContractEvents";
 import {getEtherscanLink} from "@/services/utils";
 import GLightbox from 'glightbox';
 import 'glightbox/dist/css/glightbox.css';
 import NftData from "@/views/collectable/components/NftData.vue";
 import SocialSharing from "@/components/SocialSharing";
+
+import useWeb3 from "@/connectors/hooks";
 
 export default {
   name: "Collectable",
@@ -220,6 +242,7 @@ export default {
     ListOfBuyers,
     HeroGallery,
     NftData,
+    UnfencedTitle,
   },
   methods: {
     getBackgroundImage(backgroundImage) {
@@ -239,9 +262,9 @@ export default {
     });
     const store = useStore();
 
-    const darkMode = computed(() => {
-      return store.getters['application/darkMode']
-    });
+    const { chainId } = useWeb3();
+
+    const { darkMode, setDarkMode } = useDarkMode();
 
     const {
       collectable,
@@ -254,7 +277,11 @@ export default {
       isCollectableActive,
       isUpcomming,
       isOpenEdition,
+      isVRFSale,
       itemsBought,
+      hasRequestedVRF,
+      hasFulfilledVRF,
+      hasCommittedVRF,
       // Static
       type,
       media,
@@ -266,6 +293,7 @@ export default {
       description,
       events,
       startsAt,
+      minimumStartsAt,
       endsAt,
       liveStatus,
       is_sold_out,
@@ -288,18 +316,30 @@ export default {
     const backgroundImage = ref(false);
     const titleMonospace = ref(false);
 
+    const darkModeEnabled = [
+      '0xmons-mork',
+      'crossover',
+      'virus',
+      'enkindle',
+      'eye-contact',
+      'face-off',
+      'nosferatus-mushroom-party',
+    ].indexOf(route.params["slug"]) > -1;
+    
+    setDarkMode(darkModeEnabled);
+
+    onUnmounted(() => {
+      setDarkMode(false);
+    })
+
     // TODO: Make this into a DB datasource unless V3 no longer uses this
-    if(['0xmons-mork'].indexOf(route.params["slug"]) > -1) {
-      store.dispatch("application/setDarkMode", true);
+    if (darkModeEnabled) {
       switch(route.params["slug"]) {
         case '0xmons-mork':
           backgroundImage.value = '0xmons-tile.png';
           titleMonospace.value = true;
           break;
       }
-    } else {
-      // Disable dark mode until dark mode is supported across website
-      store.dispatch("application/setDarkMode", false);
     }
 
     const currentEndsAt = computed(() => {
@@ -308,6 +348,10 @@ export default {
 
     const currentStartsAt = computed(() => {
       return startsAt.value;
+    });
+
+    const currentMinimumStartsAt = computed(() => {
+      return minimumStartsAt.value;
     });
 
     const keywords = computed(() => {
@@ -357,6 +401,9 @@ export default {
       let nftAddress = collectable.value.nft_contract_address
       let nftTokenId = collectable.value.nft_token_id
       let url = `https://opensea.io/assets/${nftAddress}/${nftTokenId}`;
+      if(Number(chainId.value) > 0) {
+        url = `https://testnets.opensea.io/assets/${nftAddress}/${nftTokenId}`;
+      }
       window.open(url, '_blank').focus()
     }
 
@@ -421,6 +468,7 @@ export default {
       events,
       currentStartsAt,
       currentEndsAt,
+      currentMinimumStartsAt,
       liveStatus,
       is_sold_out,
       is_closed,
@@ -432,6 +480,10 @@ export default {
       nextBidPrice,
       isOpenEdition,
       itemsBought,
+      isVRFSale,
+      hasRequestedVRF,
+      hasFulfilledVRF,
+      hasCommittedVRF,
       backgroundImage,
       darkMode,
       titleMonospace,
@@ -452,6 +504,7 @@ export default {
 
 <style lang="scss">
 .description {
+  word-break: break-word;
   p {
     margin-bottom: 1rem;
   }

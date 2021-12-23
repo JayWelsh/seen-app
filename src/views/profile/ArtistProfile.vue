@@ -47,7 +47,7 @@
           <product-card
             v-if="collectable != null"
             :collectable="collectable"
-            @click="navigateToCollectable(collectable.slug, collectable.is_slug_full_route)"
+            @click="navigateToCollectable(collectable.slug, collectable.is_slug_full_route, collectable.version)"
           />
           <div
             v-else
@@ -68,15 +68,15 @@
 </template>
 
 <script>
-import {ref, computed} from "vue";
+import {ref, computed, onUnmounted} from "vue";
 import { useRouter } from "vue-router";
 import { useMeta } from "vue-meta";
-import {useStore} from "vuex";
 
 import FencedTitle from "@/components/FencedTitle.vue";
 import Container from "@/components/Container.vue";
 import SocialLine from "@/components/PillsAndTags/SocialLine.vue";
 import { ArtistService } from "@/services/apiService";
+import useDarkMode from "@/hooks/useDarkMode";
 import useDropsWithPagination from "@/hooks/useDropsWithPagination.js";
 import ProductCard from "@/components/ProductCard.vue";
 
@@ -97,31 +97,31 @@ export default {
     }
   },
   async setup() {
-    const store = useStore();
     const { meta } = useMeta({
       title: "Loading...",
     });
     const router = useRouter();
-    const {data} = await ArtistService.show(router.currentRoute.value.params.artistSlug);
+    const { darkMode, setDarkMode } = useDarkMode();
+
+    onUnmounted(() => {
+      setDarkMode(false);
+    })
+
     const backgroundImage = ref(false);
 
+    const darkModeEnabled = ['0xmons', 'haydiroket', 'tengushee', 'desultor', 'cruelcoppinger', 'nostallergy', 'deathimself'].indexOf(router?.currentRoute?.value?.params?.artistSlug) > -1
+    setDarkMode(darkModeEnabled);
+    
     // TODO: Make this into a DB datasource unless V3 no longer uses this
-    if(['0xmons'].indexOf(router?.currentRoute?.value?.params?.artistSlug) > -1) {
-      store.dispatch("application/setDarkMode", true);
+    if (darkModeEnabled) {
       switch(router?.currentRoute?.value?.params?.artistSlug) {
         case '0xmons':
           backgroundImage.value = '0xmons-tile.png';
           break;
       }
-    } else {
-      // Disable dark mode until dark mode is supported across website
-      store.dispatch("application/setDarkMode", false);
     }
 
-    const darkMode = computed(() => {
-      return store.getters['application/darkMode']
-    });
-
+    const {data} = await ArtistService.show(router.currentRoute.value.params.artistSlug);
     const artist = ref(data);
     meta.title = artist.value.name;
 
@@ -134,16 +134,23 @@ export default {
     const listOfCollectables = computed(
       () => paginatedCollectables.listOfCollectables.value
     );
-    const navigateToCollectable = function (slug, isSlugFullRoute) {
+    const navigateToCollectable = function (slug, isSlugFullRoute, version) {
       if(isSlugFullRoute) {
         router.push({
           name: slug,
         });
       }else{
-        router.push({
-          name: "collectableAuction",
-          params: { slug: slug },
-        });
+        if(version === 2) {
+          router.push({
+            name: "collectableDropV2",
+            params: { slug: slug },
+          });
+        } else if (version === 3) {
+          router.push({
+            name: "collectableDropV3",
+            params: { slug: slug },
+          });
+        }
       }
     };
 

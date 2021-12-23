@@ -17,6 +17,15 @@
       </div>
 
       <div class="flex justify-start items-center">
+
+        <toggle
+          :value="filterExcludeEnded"
+          class="mr-8"
+          @onChange="handleExcludeEndedToggle($event)"
+        >
+          <span :class="darkMode ? 'dark-mode-text' : 'text-black'" class="font-bold">Exclude Ended</span>
+        </toggle>
+
         <toggle
           :value="filterAuctions"
           class="mr-8"
@@ -40,10 +49,15 @@
           v-for="collectable in listOfCollectables"
           :key="collectable && collectable.id"
         >
-          <product-card
+          <!-- <product-card
             v-if="collectable != null"
             :collectable="collectable"
-            @click="navigateToCollectable(collectable.slug, collectable.is_slug_full_route)"
+            @click="navigateToCollectable(collectable.slug, collectable.is_slug_full_route, collectable.version)"
+          /> -->
+          <product-card-v3
+            v-if="collectable != null"
+            :collectable="collectable"
+            @click="navigateToCollectable(collectable.slug, collectable.is_slug_full_route, collectable.version)"
           />
           <div
             v-else
@@ -66,20 +80,20 @@
 </template>
 
 <script>
-import { computed, reactive, ref } from "vue";
+import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useMeta } from "vue-meta";
-import { useStore } from "vuex";
 
 import Container from "@/components/Container.vue";
 import ProductCard from "@/components/ProductCard.vue";
+import ProductCardV3 from "@/components/ProductCardV3.vue";
 import FencedTitle from "@/components/FencedTitle.vue";
 import Toggle from "@/components/Inputs/Toggle.vue";
 import HowToVideo from "@/components/HowToVideo.vue";
 import QuoteCarousel from "@/components/Quote/QuoteCarousel.vue";
 import ArtistCard from "@/components/ArtistCard.vue";
-
 import useDropsWithPagination from "@/hooks/useDropsWithPagination.js";
+import useDarkMode from "@/hooks/useDarkMode";
 
 export default {
   name: "Drops",
@@ -87,19 +101,14 @@ export default {
     Container,
     FencedTitle,
     ProductCard,
+    ProductCardV3,
     Toggle,
     HowToVideo,
     QuoteCarousel,
     ArtistCard,
   },
   setup() {
-
-    const store = useStore();
-
-    // Disable dark mode until dark mode is supported across website
-    store.dispatch("application/setDarkMode", false);
-
-    const darkMode = computed(() => store.getters['application/darkMode']);
+    const { darkMode } = useDarkMode();
 
     const { meta } = useMeta({
       title: "Drops",
@@ -107,6 +116,7 @@ export default {
     const router = useRouter();
     const filterAuctions = ref(true);
     const filterEditions = ref(true);
+    const filterExcludeEnded = ref(false);
 
     const paginatedCollectables = useDropsWithPagination();
     const listOfCollectables = computed(
@@ -131,24 +141,40 @@ export default {
       filterEditions.value = event;
       paginatedCollectables.filter(filterAuctions.value, filterEditions.value);
     }
-    const navigateToCollectable = function (slug, isSlugFullRoute) {
+
+    const handleExcludeEndedToggle = (event) => {
+      filterExcludeEnded.value = event;
+      paginatedCollectables.filter(filterAuctions.value, filterEditions.value, {excludeEnded: event});
+    }
+
+    const navigateToCollectable = function (slug, isSlugFullRoute, version) {
       if(isSlugFullRoute) {
         router.push({
           name: slug,
         });
       } else {
-        router.push({
-          name: "collectableAuction",
-          params: { slug: slug },
-        });
+        if(version === 2) {
+          router.push({
+            name: "collectableDropV2",
+            params: { slug: slug },
+          });
+        } else if (version === 3) {
+          router.push({
+            name: "collectableDropV3",
+            params: { slug: slug },
+          });
+        }
       }
     };
 
     return {
       filterAuctions,
       filterEditions,
+      filterExcludeEnded,
+
       handleAuctionsToggle,
       handleEditionsToggle,
+      handleExcludeEndedToggle,
 
       listOfCollectables,
       hasMore,

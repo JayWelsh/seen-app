@@ -1,5 +1,8 @@
 import {$axios} from './api/axios';
 
+import { useV3NftContractNetworkReactive } from '@/hooks/useContract.js';
+import { useOpenSeaBaseAPI, useOpenSeaCollectionV3 } from '@/constants';
+
 $axios.defaults.baseURL = `${process.env.VUE_APP_API_URL}/`;
 export const ApiService = {
 
@@ -50,12 +53,21 @@ export const UserService = {
     update(walletAddress, payload) {
         return ApiService.put('users/' + walletAddress, payload);
     },
+    getEmailAddressAndPreferences(walletAddress, payload) {
+        return ApiService.post(`users/${walletAddress}/get-email-address-and-preferences/`, payload);
+    },
+    updateEmailAddressAndPreferences(walletAddress, payload) {
+        return ApiService.post(`users/${walletAddress}/update-email-address-and-preferences/`, payload);
+    },
+    deleteEmailAddress(walletAddress, payload) {
+        return ApiService.post(`users/${walletAddress}/delete-email-address/`, payload);
+    },
     getExtendedUserData(payload) {
         return ApiService.post(`users/usernames/`, payload);
     },
     avatar(payload) {
         return ApiService.post(`users/avatars/`, payload);
-    }
+    },
 };
 
 export const LeaderboardService = {
@@ -69,11 +81,20 @@ export const CollectablesService = {
         // serialize
         return ApiService.query('collectables', {...pagination, ...filter});
     },
+    hero() {
+        return ApiService.query('hero');
+    },
     show(slug) {
         return ApiService.get(`collectables/${slug}`);
     },
+    showSecondary(slug) {
+        return ApiService.get(`collectables/secondary/${slug}`);
+    },
     winner(contractAddress, payload) {
         return ApiService.post(`collectables/${contractAddress}/winner`, payload);
+    },
+    publishConsignmentByConsignmentId(consignmentId) {
+        return ApiService.post(`/collectables/publish-consignment`, {consignment_id: consignmentId});
     },
 };
 
@@ -108,7 +129,10 @@ export const ArtistService = {
     },
     show(slug) {
         return ApiService.get(`artists/${slug}`);
-    }
+    },
+    requestAccessToSelfCreate(payload) {
+        return ApiService.post(`artists/self-create/requests`, payload);
+    },
 };
 
 export const ExchangeRateService = {
@@ -131,8 +155,8 @@ export const IPFSService = {
             throw new Error(`[RWV] ApiService ${error}`);
         });
     },
-    pin(payload, onProgressPercentCallback = false, fullFileSize = false) {
-        return ApiService.post(`ipfs/pin/`, payload, onProgressPercentCallback && fullFileSize && {
+    pinFile(payload, onProgressPercentCallback = false, fullFileSize = false) {
+        return ApiService.post(`ipfs/pin/file/`, payload, onProgressPercentCallback && fullFileSize && {
             onUploadProgress: progressEvent => {
                 if(fullFileSize) {
                     let progressPercent = Math.floor(progressEvent.loaded * 100 / fullFileSize);
@@ -140,7 +164,10 @@ export const IPFSService = {
                 }
             }
         });
-    }
+    },
+    pinJSON(payload) {
+        return ApiService.post(`ipfs/pin/json/`, payload);
+    },
 };
 
 export const OpenSeaAPIService = {
@@ -174,4 +201,58 @@ export const OpenSeaAPIService = {
 
         return mapped;
     },
+    async getProfileEntriesV3(chainId, owner, limit = 6, offset = 0) {
+
+        const openSeaBaseAPI = useOpenSeaBaseAPI(chainId);
+        const openSeaCollection = useOpenSeaCollectionV3(chainId);
+
+        let v3NftContract = await useV3NftContractNetworkReactive(true);
+
+        const url = `${openSeaBaseAPI}assets?owner=${owner}&collection=${openSeaCollection}&limit=${limit}&offset=${offset}`;
+        const data = await $axios.get(url);
+
+        console.log({data})
+
+        if (!data) return [];
+
+        const assets = data.assets;
+
+        if (!assets.length) {
+            return [];
+        }
+
+        const tokenContractAddressesToIds = {};
+
+        for(let asset of assets) {
+            if(!tokenContractAddressesToIds[asset.asset_contract.address]) {
+                tokenContractAddressesToIds[asset.asset_contract.address] = [asset.token_id];
+            } else {
+                tokenContractAddressesToIds[asset.asset_contract.address].push(asset.token_id);
+            }
+        }
+
+        const collectables = await ApiService.post('collectables/mapWithTokenContractAddress', {tokenContractAddressesToIds});
+        const mapped = [];
+
+        for(let asset of assets) {
+            const match = collectables.data.find(c => c.nft_token_id === asset.token_id);
+            let tokenBalance = await v3NftContract.state.contract.balanceOf(owner, match.nft_token_id);
+            let previewMedia = match.media?.length > 0 ? match.media.filter(media => media.is_preview).map(item => item.url)[0] : false;
+            if (match) {
+                mapped.push({
+                    data: {
+                        title: match.title,
+                        token_id: match.nft_token_id,
+                        token_address: match.nft_contract_address,
+                        image: previewMedia,
+                        tags: match.tags.map(tag => tag.name),
+                        openSeaPreviewImage: asset.image_url,
+                        balance: Number(tokenBalance),
+                    },
+                });
+            }
+        }
+
+        return mapped;
+    }
 };

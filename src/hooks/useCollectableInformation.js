@@ -4,7 +4,7 @@ import useWeb3 from "@/connectors/hooks";
 import { BigNumber } from "@ethersproject/bignumber";
 import { formatEther, parseEther } from "@ethersproject/units";
 
-import useContractEvents from "@/hooks/useContractEvents";
+import useMarketContractEvents from "@/hooks/useMarketContractEvents";
 import useExchangeRate from "@/hooks/useExchangeRate.js";
 import orderBy from "lodash/orderBy";
 
@@ -13,6 +13,9 @@ import {
     COLLECTABLE_STATE,
 } from "@/constants/Collectables.js";
 import PURCHASE_TYPE from "@/constants/PurchaseTypes.js";
+import MARKET_HANDLER_TYPES from "@/constants/MarketHandlerTypes.js";
+
+import { marketHandlerToListingType } from '@/constants';
 
 export default function useCollectableInformation(initialCollectable = {}) {
     const { converEthToUSD } = useExchangeRate();
@@ -21,9 +24,18 @@ export default function useCollectableInformation(initialCollectable = {}) {
         initializeContractEvents,
         supply,
         itemsBought,
+        isReadyForClosure,
+        checkClosureStatusFn,
+        isClosed,
+        isCancelled,
+        winningAddress,
+        hasRequestedVRF,
+        hasFulfilledVRF,
+        hasCommittedVRF,
         endsAt: updatedEndsAt,
         startsAt: updatedStartsAt,
-    } = useContractEvents();
+        minimumStartsAt: updatedMinimumStartsAt,
+    } = useMarketContractEvents();
 
     const collectable = ref(initialCollectable);
     const events = ref(collectable.value.events || []);
@@ -51,6 +63,16 @@ export default function useCollectableInformation(initialCollectable = {}) {
         let orderedMedia = orderBy(media.value, 'position', "asc")
         return orderedMedia[0].url || '';
     });
+    const firstMediaType = computed(() => { // Use preview image or first
+        if (!media.value) return '';
+        const found = media.value.find(v => v.is_preview);
+
+        if (found) {
+            return found?.type?.indexOf('image') > -1 ? 'image' : 'video';
+        }
+        let orderedMedia = orderBy(media.value, 'position', "asc")
+        return orderedMedia[0]?.type?.indexOf('image') > -1 ? 'image' : 'video';
+    });
     const gallerySortedMedia = computed(() => collectable.value.mediaSorted);
     const artist = computed(() => collectable.value.artist);
     const artistStatement = computed(() => collectable.value.artist_statement);
@@ -70,7 +92,8 @@ export default function useCollectableInformation(initialCollectable = {}) {
         return (
             collectableState.value === COLLECTABLE_STATE.WAITING ||
             collectableState.value === COLLECTABLE_STATE.IN_PROGRESS ||
-            collectableState.value === COLLECTABLE_STATE.AWAITING_RESERVE
+            collectableState.value === COLLECTABLE_STATE.AWAITING_RESERVE ||
+            (!is_closed.value && !isReadyForClosure.value && !isClosed.value && !isCancelled.value && new Date(collectable.value.ends_at).getTime() > new Date().getTime())
         );
     });
     const edition = computed(() => collectable.value.edition || 0);
@@ -87,7 +110,12 @@ export default function useCollectableInformation(initialCollectable = {}) {
     );
     const liveStatus = computed(() => {
         if (collectableState.value === COLLECTABLE_STATE.CLOSED) return "closed";
-        if (collectableState.value === COLLECTABLE_STATE.DONE) return "ended";
+        if (collectableState.value === COLLECTABLE_STATE.DONE) {
+            if(checkClosureStatusFn?.value && !isReadyForClosure.value && collectable.value && (collectable.value.consignment_id === 0 || collectable.value.consignment_id)) {
+                checkClosureStatusFn.value(collectable.value.consignment_id.toString())
+            }
+            return "ended"
+        }
         if (collectableState.value === COLLECTABLE_STATE.AWAITING_RESERVE) return "awaiting-reserve-bid";
         if (collectableState.value === COLLECTABLE_STATE.WAITING)
             return "coming soon";
@@ -100,6 +128,7 @@ export default function useCollectableInformation(initialCollectable = {}) {
         return "live";
     });
     const startsAt = computed(() => collectable.value.starts_at);
+    const minimumStartsAt = computed(() => collectable.value.minimum_starts_at || collectable.value.starts_at);
     const endsAt = computed(() => collectable.value.ends_at);
     const claim = computed(() => collectable.value.claim ? collectable.value.claim : false);
     const isAuction = computed(
@@ -107,6 +136,59 @@ export default function useCollectableInformation(initialCollectable = {}) {
     );
     const isUpcomming = computed(() => collectableState.value === COLLECTABLE_STATE.WAITING);
     const isOpenEdition = computed(() => collectable.value.is_open_edition);
+    const tangibility = computed(() => collectable.value.type === 'tangible_nft' ? 'nft-physical' : 'nft-digital');
+    const tags = computed(() => collectable.value.tags.map(tag => tag.name));
+    const listingType = computed(() => marketHandlerToListingType[collectable.value.market_handler_type]);
+    const priceType = computed(() => {
+        let listingTypeCheck = marketHandlerToListingType[collectable.value.market_handler_type];
+        if(listingTypeCheck === 'auction') {
+            if(events.value.length === 0) {
+                return 'Reserve Price';
+            } else if ((collectableState.value === COLLECTABLE_STATE.DONE) || (collectableState.value === COLLECTABLE_STATE.CLOSED)) {
+                return 'Winning Bid';
+            } else {
+                return 'Current Bid';
+            }
+        } else {
+            return 'Sale Price';
+        }
+    });
+    const creatorAccount = computed(() => {
+        console.log({
+            'collectable.value.user': collectable.value.user,
+            'collectable.value?.artist': collectable.value?.artist
+        })
+        if(collectable.value.user?.wallet) {
+            return collectable.value.user.wallet;
+        } else if (collectable.value?.artist?.wallet) {
+            return collectable.value.artist.wallet
+        } else {
+            return false;
+        }
+    })
+    const creatorProfilePicture = computed(() => {
+        if(collectable.value.user?.image) {
+            return collectable.value.user.image;
+        } else if (collectable.value.artist?.avatar) {
+            return collectable.value.artist.avatar
+        } else {
+            return false;
+        }
+    })
+    const creatorUsername = computed(() => {
+        if(collectable.value.user?.username) {
+            return collectable.value.user.username;
+        } else if (collectable.value.artist?.name) {
+            return collectable.value.artist.name
+        } else {
+            return false;
+        }
+    })
+    const secondaryMarketListings = computed(() => {
+        return collectable.value?.secondary_market_listings || false;
+    })
+    
+    const isVRFSale = computed(() => collectable.value.is_vrf_drop);
 
     const updateProgress = function (event) {
         progress.value = event;
@@ -159,7 +241,7 @@ export default function useCollectableInformation(initialCollectable = {}) {
                             return carry;
                         }, 0);
             }
-            price.value = +(data.price || 0).toFixed(2);
+            price.value = +(data.price || 0).toFixed(3);
             priceUSD.value = +(data.value_in_usd || 0).toFixed(2);
             priceUSDSold.value = (events.value || [])
                 .reduce((carry, evt) => {
@@ -189,13 +271,19 @@ export default function useCollectableInformation(initialCollectable = {}) {
 
     const updateCollectableState = function () {
         const now = Date.now();
-        const start = new Date(startsAt.value);
-        const end = new Date(endsAt.value);
+        const start = startsAt.value ? new Date(startsAt.value) : null;
+        const end = endsAt.value ? new Date(endsAt.value) : null;
+        console.log({endUpdate: end})
+        const isStartInPast = start && start.getTime() <= now;
 
-        if(end.getTime() === 0 && collectable.value.is_reserve_price_auction) {
+        console.log({end, 'collectable.value.is_reserve_price_auction': collectable.value.is_reserve_price_auction, isStartInPast})
+
+        if(end === null && collectable.value.is_reserve_price_auction && isStartInPast) {
             collectableState.value = COLLECTABLE_STATE.AWAITING_RESERVE;
             return;
         }
+
+        console.log({is_closed})
 
         if (is_closed.value) {
             collectableState.value = COLLECTABLE_STATE.CLOSED;
@@ -207,7 +295,7 @@ export default function useCollectableInformation(initialCollectable = {}) {
             return;
         }
 
-        if (now > end && (end.getTime() !== 0)) {
+        if (end && (now > end) && (end.getTime() !== 0)) {
             collectableState.value = COLLECTABLE_STATE.DONE;
             return;
         }
@@ -229,6 +317,7 @@ export default function useCollectableInformation(initialCollectable = {}) {
 
     let timeoutHandler = null;
     const enableContract = function () {
+        console.log("trying enable")
         if (collectable.value == null) return;
 
         const now = Date.now();
@@ -236,14 +325,22 @@ export default function useCollectableInformation(initialCollectable = {}) {
         let endDate = new Date(endsAt.value);
         endDate.setHours(endDate.getHours() + 6);
         const end = endDate.getTime();
-        if (((now >= start) && (now < end) && !is_sold_out.value) || (new Date(endsAt.value).getTime() === 0 && collectable.value.is_reserve_price_auction)) {
-            console.log('contract initialized');
-            initializeContractEvents(collectable.value);
-        } else if (now < end && !is_sold_out.value) {
-            timeoutHandler = setTimeout(() => {
-                console.log('starting soon');
+        if(collectable.value.contract_address) {
+            if (
+                ((now >= start) && (now < end) && !is_sold_out.value) ||
+                (collectable.value.is_vrf_drop && !collectable.value.is_closed) ||
+                (new Date(endsAt.value).getTime() === 0 && collectable.value.is_reserve_price_auction) ||
+                (isAuction.value && !collectable.value.winner_address) ||
+                ((collectable.value.version === 3) && (collectable.value.market_handler_type === MARKET_HANDLER_TYPES.SALE) && !collectable.value.is_closed)
+            ) {
+                console.log('contract initialized');
                 initializeContractEvents(collectable.value);
-            }, start - now);
+            } else if ((now < end || !endsAt.value) && !is_sold_out.value) {
+                timeoutHandler = setTimeout(() => {
+                    console.log('starting soon');
+                        initializeContractEvents(collectable.value);
+                    }, start - now);
+            }
         }
     };
 
@@ -263,13 +360,17 @@ export default function useCollectableInformation(initialCollectable = {}) {
         events.value = newEvents;
         let endsAtNew = endsAt.value;
         let startsAtNew = startsAt.value;
+        let minimumStartsAtNew = minimumStartsAt.value;
         // Update price and item count
         if (isAuction.value) {
-            if (updatedEndsAt.value != null) {
+            if (updatedEndsAt.value) {
                 endsAtNew = new Date(updatedEndsAt.value).toString();
             }
-            if(updatedStartsAt.value != null) {
+            if(updatedStartsAt.value) {
                 startsAtNew = new Date(updatedStartsAt.value).toString();
+            }
+            if(updatedMinimumStartsAt.value) {
+                minimumStartsAtNew = new Date(updatedMinimumStartsAt.value).toString();
             }
         }
 
@@ -278,6 +379,7 @@ export default function useCollectableInformation(initialCollectable = {}) {
             events: [...events.value],
             ends_at: endsAtNew,
             starts_at: startsAtNew,
+            minimum_starts_at: minimumStartsAtNew,
         });
         updateCollectableState();
     };
@@ -304,10 +406,14 @@ export default function useCollectableInformation(initialCollectable = {}) {
         itemsBought,
         progress,
         isCollectableActive,
+        hasRequestedVRF,
+        hasFulfilledVRF,
+        hasCommittedVRF,
         // Static
         type,
         media,
         firstMedia,
+        firstMediaType,
         gallerySortedMedia,
         artist,
         artistStatement,
@@ -317,6 +423,7 @@ export default function useCollectableInformation(initialCollectable = {}) {
         bundleChildItems,
         startsAt,
         endsAt,
+        minimumStartsAt,
         liveStatus,
         is_sold_out,
         is_closed,
@@ -331,6 +438,19 @@ export default function useCollectableInformation(initialCollectable = {}) {
         pillOverride,
         requiresRegistration,
         isOpenEdition,
+        tangibility,
+        priceType,
+        tags,
+        creatorAccount,
+        creatorProfilePicture,
+        creatorUsername,
+        listingType,
+        isReadyForClosure,
+        isClosed,
+        isCancelled,
+        winningAddress,
+        secondaryMarketListings,
+        isVRFSale,
         // Methods
         updateProgress,
         setCollectable,

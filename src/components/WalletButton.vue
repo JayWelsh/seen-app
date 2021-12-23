@@ -24,8 +24,7 @@
         </button>
       </div>
     </div>
-    <OverlayPanel ref="op" appendTo="body" @hide="close" :showCloseIcon="false" id="overlay_panel" style="width: 280px"
-                  :breakpoints="{'960px': '75vw'}">
+    <OverlayPanel ref="op" appendTo="body" @hide="close" :showCloseIcon="false" id="overlay_panel" :breakpoints="{'960px': '75vw'}">
       <div class="dropdown-menu">
         <div class="arrow-up"></div>
         <div class="py-6 px-8 bg-background-gray lg:rounded-t-lg">
@@ -62,7 +61,13 @@
           <div class="mx-8 h-0.5 bg-background-gray"></div>
           <span>
             <button class="button dropdown-btn" @click="openWalletModal">
-            <i class="gray fas fa-user cursor-pointer mr-2" alt="SEEN"></i> Edit Profile
+              <i class="gray fas fa-user cursor-pointer mr-2" alt="SEEN"></i> Edit Profile
+            </button>
+          </span>
+          <div class="mx-8 h-0.5 bg-background-gray"></div>
+          <span>
+            <button class="button dropdown-btn" @click="openNotificationsModal">
+              <i class="gray fas fa-bell cursor-pointer mr-2" alt="Notification Manager"></i> Notification Manager
             </button>
           </span>
           <div class="mx-8 h-0.5 bg-background-gray"></div>
@@ -135,7 +140,12 @@ export default {
     const openWalletModal = () => {
       op.value.hide();
       isOpen.value = false;
-      store.dispatch('application/openModal', 'WalletModal')
+      store.dispatch('application/openModal', 'WalletModalConnectOnly')
+    };
+    const openNotificationsModal = () => {
+      op.value.hide();
+      isOpen.value = false;
+      store.dispatch('application/openModal', 'NotificationsModal')
     };
     const handleDisconnect = () => {
       close();
@@ -185,6 +195,7 @@ export default {
       error,
       account,
       openWalletModal,
+      openNotificationsModal,
       formatCrypto,
       shortenAddress,
       handleDisconnect,

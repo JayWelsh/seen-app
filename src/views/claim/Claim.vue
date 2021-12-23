@@ -151,6 +151,19 @@
             <span class="error-notice">{{ messageField.errors[0] }}</span>
           </div>
 
+          <div class="fc mb-4">
+            <div :style="{'display': 'flex', 'justify-content': 'space-between'}">
+              <input
+                v-model="understandsClaimQuantityField.value"
+                type="checkbox"
+                placeholder="Understands Claim Quantity"
+                :style="{'display': 'inline-block', height: '30px'}"
+              />
+              <label :style="{'display': 'inline-block', width: 'calc(100% - 30px)', 'padding-left': '10px'}">By ticking this checkbox, you acknowledge that this claim submission will be considered as a physical claim for all the units of this NFT that are owned by your Ethereum address (e.g. if your Ethereum address owns 2 copies of this NFT, and each is redeeemable for a physical item, this submission will be considered as a claim for 2 physical copies of this NFT to be sent to the address provided above).</label>
+            </div>
+            <span class="error-notice">{{ understandsClaimQuantityField.errors[0] }}</span>
+          </div>
+
           <div class="flex items-center justify-center mb-4 mt-8">
             <button
               type="submit"
@@ -169,7 +182,6 @@
 import { Web3Provider } from "@ethersproject/providers";
 import { computed, ref, reactive } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useStore } from "vuex";
 
 import Container from "@/components/Container.vue";
 import { ClaimsService } from "@/services/apiService";
@@ -177,7 +189,7 @@ import { ClaimsService } from "@/services/apiService";
 import useWeb3 from "@/connectors/hooks";
 import useSigner from "@/hooks/useSigner";
 import { useClaimContract } from "@/hooks/useContract";
-import { useField, useForm, ValidationObserver } from "vee-validate";
+import { useField, useForm } from "vee-validate";
 import { useToast } from "primevue/usetoast";
 import { useMeta } from "vue-meta";
 import { countryList } from "@/connectors/constants";
@@ -192,11 +204,6 @@ export default {
     // TODO:
     // 1. add Title column
     // 2. test wiring
-
-    const store = useStore();
-
-    // Disable dark mode until dark mode is supported across website
-    store.dispatch("application/setDarkMode", false);
 
     const toast = useToast();
     const route = useRoute();
@@ -228,6 +235,7 @@ export default {
         zip: "",
         country: "",
         message: "",
+        understands_claim_quantity: false,
       },
     });
 
@@ -242,6 +250,7 @@ export default {
     const zipField = reactive(useField("zip", "required"));
     const countryField = reactive(useField("country", "required"));
     const messageField = reactive(useField("message"));
+    const understandsClaimQuantityField = reactive(useField("claim quantity acknowledgement", inputValue => !!inputValue));
 
     const onClaim = async () => {
       console.log(provider.value);
@@ -329,6 +338,16 @@ export default {
           .then(() => {
             let message =
               "Your artwork will be delivered within 3 - 4 weeks, keep in mind it may take longer due to COVID restrictions in certain countries";
+            if(claim?.value?.collectable?.is_slug_full_route && claim?.value?.collectable?.slug) {
+              router.push({
+                name: claim?.value?.collectable?.slug,
+              });
+            } else {
+              router.push({
+                name: "collectableAuction",
+                params: { slug: claim?.value?.collectable?.slug },
+              });
+            }
             toast.add({
               severity: "success",
               summary: "Success",
@@ -336,14 +355,30 @@ export default {
               life: 10000,
             });
           })
-          .catch(() =>
-            toast.add({
-              severity: "error",
-              summary: "Error",
-              detail:
-                "Could not submit your details. Please try to enter them later.",
-              life: 3000,
-            })
+          .catch((e) => {
+              let message = e?.data?.message ? parseError(e?.data?.message) : e;
+              if(!message) {
+                message = "Could not submit your details. Please try to enter them later.";
+              }
+              if(message.indexOf('already submitted a claim') > -1) {
+                if(claim?.value?.collectable?.is_slug_full_route && claim?.value?.collectable?.slug) {
+                  router.push({
+                    name: claim?.value?.collectable?.slug,
+                  });
+                } else {
+                  router.push({
+                    name: "collectableAuction",
+                    params: { slug: claim?.value?.collectable?.slug },
+                  });
+                }
+              }
+              toast.add({
+                severity: "error",
+                summary: "Error",
+                detail: message,
+                life: 10000,
+              })
+            }
           );
       } else {
         // toastr to login
@@ -396,6 +431,7 @@ export default {
       countryField,
       countries,
       messageField,
+      understandsClaimQuantityField,
       state,
     };
   },

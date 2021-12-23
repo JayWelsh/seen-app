@@ -2,7 +2,7 @@
   <div :class="darkMode ? 'hero-auction-dark-mode' : 'hero-auction-light-mode'" class="hero-auction">
     <container class="py-15 flex flex-col lg:flex-row">
       <div
-          class="media relative flex items-center flex-1 cursor-pointer"
+          class="media relative flex items-center flex-1 cursor-pointer rounded-3xl overflow-hidden"
           @click="navigateToCollectable(collectable.slug, collectable.is_slug_full_route)"
       >
         <media-loader
@@ -31,31 +31,33 @@
             class="text-black flex lg:hidden mt-6"
             color="fence-dark"
             text-align="center"
-            :titleMonospace="true"
+            :titleMonospace="titleMonospace"
             :closed="true"
-        ><span class="flex-shrink-0">{{ title }}</span></fenced-title
-        >
+        ><span class="flex-shrink-0">{{ title }}</span></fenced-title>
 
         <unfenced-title
             class="text-black hidden lg:flex"
             color="fence-dark"
             text-align="left"
-            :titleMonospace="true"
+            :titleMonospace="titleMonospace"
             :closed="true"
         ><span class="flex-shrink-0">{{ title }}</span></unfenced-title>
 
         <div class="flex lg:justify-start items-center mt-2 justify-center">
-          <user-badge
-              type="dark"
-              :url="artist.avatar"
-              :username="pillOverride ? pillOverride : artist.name"
-              :artistSlug="artist.slug"
-          />
-          <live-indicator :status="liveStatus" class="text-white ml-4"/>
+          <div class="light-mode-surface button shortened shadow-lifted">
+            <user-or-artist-badge
+              :creatorAccount="creatorAccount"
+              :creatorUsername="creatorUsername"
+              :creatorProfilePicture="creatorProfilePicture"
+            />
+          </div>
+          <live-indicator :status="liveStatus" class="text-black ml-4"/>
         </div>
 
-        <div class="auction-action flex items-center pt-14">
-          <button class="button light mr-7" @click="navigateToCollectable">
+        <light-typography textAlign="left" class="mt-6 collectable-description">{{description}}</light-typography>
+
+        <div class="auction-action flex items-center pt-6">
+          <button class="button primary dark mr-7" @click="navigateToCollectable">
             {{ isUpcomming && !collectable.contract_address ? "Preview" : (isAuction ? "View Auction" : "View Drop") }} <i class="fas fa-arrow-right ml-3 icon-right"></i>
           </button>
 
@@ -63,27 +65,28 @@
               size="md"
               type="Ether"
               v-if="!shouldHidePrice"
-              :class="isCollectableActive ? 'text-white' : 'text-gray-400'"
+              :class="isCollectableActive ? 'text-black' : 'text-gray-400'"
               :price="price"
               :priceUSD="isAuction ? priceUSD : priceUSDSold"
           />
         </div>
 
-        <div class="timer pt-12">
-          <progress-bar
-              :inversed="isAuction"
+        <div class="timer pt-2">
+          <!-- <progress-bar
+              :inversed="isAuction || isOpenEdition"
               class="h-3"
+              :class="{'': progress === 1}"
               progressBackgroundColor="bg-fence-dark"
               :endDate="currentEndsAt"
               :progress="progress"
               :colorClass="
               isCollectableActive && !isAwaitingReserve
                 ? isUpcomming
-                  ? 'bg-white'
+                  ? 'bg-primary'
                   : 'bg-primary'
-                : 'bg-white'
+                : 'bg-primary'
             "
-          />
+          /> -->
 
           <template v-if="isAuction">
             <div
@@ -96,7 +99,7 @@
                 v-if="!is_sold_out && !isAwaitingReserve"
                 ref="timerRef"
                 class="text-black text-sm mt-2"
-                :class="isCollectableActive ? 'text-white' : 'text-gray-400'"
+                :class="isCollectableActive ? 'text-black' : 'text-gray-400'"
                 :startDate="getStartsAt"
                 :endDate="currentEndsAt"
                 :isAuction="isAuction"
@@ -113,10 +116,10 @@
 
           <template v-else>
             <progress-timer
-                v-if="isUpcomming && isCollectableActive"
+                v-if="(isUpcomming || isOpenEdition) && isCollectableActive"
                 ref="timerRef"
                 class="text-black text-sm mt-2"
-                :class="isCollectableActive ? 'text-white' : 'text-gray-400'"
+                :class="isCollectableActive ? 'text-black' : 'text-gray-400'"
                 :startDate="getStartsAt"
                 :endDate="currentEndsAt"
                 :isAuction="isAuction"
@@ -124,13 +127,24 @@
                 @onTimerStateChange="updateState"
             />
             <div
-                v-else
-                class="text-sm font-bold mt-2"
-                :class="isCollectableActive ? 'text-white' : 'text-gray-400'"
+              v-if="isOpenEdition"
+              class="text-sm font-bold mt-2"
+              :class="'text-gray-400'"
             >
               {{
                 isCollectableActive
-                    ? `${items} out of ${itemsOf}`
+                    ? `${itemsBought} Editions Purchased`
+                    : is_closed ? "Closed" : "Sold Out"
+              }}
+            </div>
+            <div
+                v-else
+                class="text-sm font-bold mt-2"
+                :class="isCollectableActive ? 'text-black' : 'text-gray-400'"
+            >
+              {{
+                isCollectableActive
+                    ? `${items} out of ${itemsOf} editions left`
                     : is_sold_out
                     ? "Sold Out"
                     : "Ended"
@@ -139,7 +153,7 @@
           </template>
         </div>
 
-        <div class="abstract-circles-hero">
+        <div class="abstract-circles abstract-circles-hero">
           <img src="@/assets/images/abstract-circles.svg" alt="">
         </div>
 
@@ -154,7 +168,7 @@ import {computed, ref, watch} from "vue";
 import {useRouter} from "vue-router";
 import { useStore } from "vuex";
 
-import UserBadge from "@/components/PillsAndTags/UserBadge.vue";
+import UserOrArtistBadge from "@/components/PillsAndTags/UserOrArtistBadge.vue";
 import PriceDisplay from "@/components/PillsAndTags/PriceDisplay.vue";
 import Tag from "@/components/PillsAndTags/Tag.vue";
 import LiveIndicator from "@/components/PillsAndTags/LiveIndicator.vue";
@@ -163,14 +177,15 @@ import ProgressTimer from "@/components/Progress/ProgressTimer.vue";
 import Container from "@/components/Container.vue";
 import FencedTitle from "@/components/FencedTitle.vue";
 import UnfencedTitle from "@/components/UnfencedTitle.vue";
+import LightTypography from "@/components/LightTypography.vue";
 import MediaLoader from "@/components/Media/MediaLoader.vue";
-
 import useCollectableInformation from "@/hooks/useCollectableInformation.js";
+import useDarkMode from "@/hooks/useDarkMode";
 
 export default {
   name: "HeroAuction",
   components: {
-    UserBadge,
+    UserOrArtistBadge,
     Tag,
     PriceDisplay,
     ProgressBar,
@@ -180,6 +195,7 @@ export default {
     FencedTitle,
     UnfencedTitle,
     MediaLoader,
+    LightTypography,
   },
   props: {
     collectable: Object,
@@ -199,15 +215,12 @@ export default {
     const router = useRouter();
     const timerRef = ref(null);
     const titleMonospace = ref(false);
+    const { darkMode } = useDarkMode();
 
     // TODO: Make this into a DB datasource unless V3 no longer uses this
     if([115].indexOf(props?.collectable?.id) > -1) {
       titleMonospace.value = true;
     }
-
-    const store = useStore();
-
-    const darkMode = computed(() => store.getters['application/darkMode']);
 
     const {
       collectableState,
@@ -223,7 +236,11 @@ export default {
       // media,
       firstMedia,
       artist,
+      creatorAccount,
+      creatorProfilePicture,
+      creatorUsername,
       title,
+      description,
       startsAt,
       endsAt,
       liveStatus,
@@ -234,6 +251,8 @@ export default {
       isNft,
       isAuction,
       isUpcomming,
+      isOpenEdition,
+      itemsBought,
       // Methods
       updateProgress,
       // setCollectable,
@@ -254,10 +273,17 @@ export default {
           name: props.collectable.slug,
         });
       }else{
-        router.push({
-          name: "collectableAuction",
-          params: {slug: props.collectable.slug},
-        });
+        if(props.collectable.version === 2) {
+          router.push({
+            name: "collectableDropV2",
+            params: { slug: props.collectable.slug },
+          });
+        } else if (props.collectable.version === 3) {
+          router.push({
+            name: "collectableDropV3",
+            params: { slug: props.collectable.slug },
+          });
+        }
       }
     };
 
@@ -327,7 +353,11 @@ export default {
       type,
       firstMedia,
       artist,
+      creatorAccount,
+      creatorProfilePicture,
+      creatorUsername,
       title,
+      description,
       startsAt,
       endsAt,
       liveStatus,
@@ -340,6 +370,8 @@ export default {
       isUpcomming,
       darkMode,
       titleMonospace,
+      isOpenEdition,
+      itemsBought,
       // Methods
       updateProgress,
       updateState,
@@ -383,18 +415,28 @@ export default {
     }
   }
 
+  .collectable-description {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+
+    @supports (-webkit-line-clamp: 3) {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: initial;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+    }
+  }
+
   .abstract-circles-hero {
     position: absolute;
     z-index: -1;
   }
 }
 .hero-auction-light-mode {
-  background-image: linear-gradient(180deg, #333333 2%, #000000 100%);
-
-  @screen lg {
-    // Change the direction of fade so it doesn't interfere with fence colors
-    background-image: linear-gradient(66deg, #333333 2%, #000000 100%);
-  }
+  background-image: transparent;
 }
 .hero-auction-dark-mode {
   background-image: linear-gradient(180deg, #000000 2%, #000000 100%);

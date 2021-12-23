@@ -74,7 +74,7 @@
                 v-else
                 :collectable="collectable.data"
                 @click="
-                  navigateToCollectable(collectable.data.slug, collectable.data.is_slug_full_route)
+                  navigateToCollectable(collectable.data.slug, collectable.data.is_slug_full_route, collectable.data.version)
                 "
               />
             </template>
@@ -160,9 +160,6 @@ export default {
     const { account } = useWeb3();
     const assets = ref([]);
 
-    // Disable dark mode until dark mode is supported across website
-    store.dispatch("application/setDarkMode", false);
-
     const isOwnProfile = computed(() => (account.value === route.params.userAddress) || !route.params.userAddress);
     const address = route.params.userAddress
       ? route.params.userAddress
@@ -173,7 +170,7 @@ export default {
     const userLocal = computed(() => store.getters['user/user']);
     const collection = useUsersCollectionWithPagination();
     watchEffect(() => {
-      if (isOwnProfile.value && userLocal.value) {
+      if (isOwnProfile.value && userLocal.value && userLocal.value.wallet) {
         collection.setAddress(userLocal.value.wallet);
         collection.load();
       }
@@ -189,10 +186,10 @@ export default {
 
     const isUserFound = computed(() => {
       console.log((!!user.value) || (isOwnProfile.value && account.value));
-      return (!!user.value) || (isOwnProfile.value && account.value);
+      return (!!user.value && user?.value?.wallet) || (isOwnProfile.value && account.value);
     });
 
-    const hasUserData = computed(() => !!user.value);
+    const hasUserData = computed(() => !!user.value && user?.value?.wallet);
 
     const socials = computed(() =>
       user.value && user.value.socials
@@ -207,16 +204,23 @@ export default {
       collection.loadMore();
     };
 
-    const navigateToCollectable = function (slug, isSlugFullRoute) {
+    const navigateToCollectable = function (slug, isSlugFullRoute, version) {
       if(isSlugFullRoute) {
         router.push({
           name: slug,
         });
       }else{
-        router.push({
-          name: "collectableAuction",
-          params: { slug: slug },
-        });
+        if(version === 2) {
+          router.push({
+            name: "collectableDropV2",
+            params: { slug: slug },
+          });
+        } else if (version === 3) {
+          router.push({
+            name: "collectableDropV3",
+            params: { slug: slug },
+          });
+        }
       }
     };
 

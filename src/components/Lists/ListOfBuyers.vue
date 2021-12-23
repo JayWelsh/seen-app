@@ -2,7 +2,7 @@
   <div class="list-of-buyers rounded-container" :class="darkMode ? 'dark-mode-surface no-border' : 'light-mode-surface'">
     <template v-if="list.length === 0">
       <div class="text-center text-gray-400">
-        No buyers yet! Be the first!
+        {{ isAuction ? "No bidders yet! Be the first!" : "No buyers yet! Be the first!" }}
       </div>
     </template>
     <template v-else>
@@ -59,7 +59,7 @@
 
 <script>
 import {computed, ref, toRefs, watch} from "vue";
-import {useStore} from "vuex";
+import useDarkMode from '@/hooks/useDarkMode';
 import {format} from 'timeago.js';
 
 import { UserService } from "@/services/apiService"
@@ -72,10 +72,13 @@ export default {
   components: {PriceDisplay, Icon},
   props: {
     list: Array,
+    isAuction: {
+      type: Boolean,
+      default: true,
+    },
   },
   setup(props) {
-    const store = useStore();
-    const darkMode = computed(() => store.getters['application/darkMode']);
+    const { darkMode } = useDarkMode();    
 
     const {list: inputList} = toRefs(props);
     const extendedUserData = ref({});

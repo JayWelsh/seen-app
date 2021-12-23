@@ -1,15 +1,18 @@
 <template>
-  <div class="title flex items-center fence-wrap" >
+  <div class="title items-center" >
 
     <div
         class="title-text font-title lg:flex-shrink-0 flex-shrink"
         :style="{
-          'max-width': '100%',
+          'max-width': maxWidth ? maxWidth : '100%',
           'width': '100%',
           'text-align': alignment,
           'font-size': fontSize ? fontSize : '16px',
           'font-weight': fontWeight ? fontWeight : '400',
           'margin-bottom': marginBottom ? marginBottom : '0px',
+          ...(paddingBottom && {'padding-bottom': paddingBottom}),
+          ...(upperCase && {'text-transform': 'uppercase'}),
+          ...(lineHeight && {'line-height': lineHeight}),
           ...(titleMonospace && {'font-family': 'monospace'})
         }"
     >
@@ -25,9 +28,13 @@ export default {
   props: {
     textAlign: String, // left, center, right
     monospace: Boolean,
-    fontSize: Number,
+    fontSize: String,
     fontWeight: Number,
-    marginBottom: Number,
+    lineHeight: String,
+    marginBottom: String,
+    paddingBottom: String,
+    upperCase: Boolean,
+    maxWidth: String,
   },
   computed: {
     alignment: function () {
@@ -42,7 +49,6 @@ export default {
 .title-small {
   .title-text {
     max-width: 80%;
-    margin-top: -6px;
     font-size: 36px;
   }
 }
@@ -51,7 +57,6 @@ export default {
  @apply text-light-grey;
   max-width: 80%;
   font-size: 36px;
-  margin-top: -6px;
   @screen md {
     font-size: 46px;
   }

@@ -8,7 +8,7 @@
 
 <script>
 import useTimer, {TIMER_STATE} from "@/hooks/useTimer.js";
-import {computed, watch, ref, toRefs} from 'vue';
+import {computed, watch, watchEffect, ref, toRefs} from 'vue';
 
 export default {
   name: "ProgressTimer",
@@ -23,11 +23,11 @@ export default {
     },
     startDate: {
       type: String,
-      default: "2021-03-14T02:00:00.000Z",
+      default: null,
     },
     endDate: {
       type: String,
-      default: "2021-03-16T10:00:00.000Z",
+      default: null,
     },
     overrideStartsInLabel: {
       type: String,
@@ -36,6 +36,10 @@ export default {
     overrideEndsInLabel: {
       type: String,
       default: "",
+    },
+    isAwaitingReserve: {
+      type: Boolean,
+      default: false,
     }
   },
   // TODO timer logic
@@ -45,11 +49,11 @@ export default {
 
     watch(percentage, () => ctx.emit('onProgress', percentage.value));
     watch(timerState, () => ctx.emit('onTimerStateChange', timerState.value));
-    watch([toRefs(props).endDate, toRefs(props).startDate], (v, p) => {
+    watch([toRefs(props).endDate, toRefs(props).startDate, toRefs(props).isAwaitingReserve], (v, p) => {
       if (v[0] !== p[0] || v[1] !== p[1]) {
         let diffEnd = new Date(v[0]).getTime() - new Date(p[0]).getTime();
         let diffStart = new Date(v[1]).getTime() - new Date(p[1]).getTime();
-        addSeconds((diffEnd) / 1000, diffStart / 1000);
+        addSeconds((diffEnd) / 1000, diffStart / 1000, v[2]);
         // Hack if server timestamp isn't up to date
         if (ended.value && new Date() < new Date(p[0])) {
           setTimeout(() => {
@@ -57,6 +61,7 @@ export default {
               startTimer({
                 startDate: props.startDate,
                 endDate: props.endDate,
+                isAwaitingReserve: v[2],
               });
             }
           }, 4000)
@@ -69,13 +74,13 @@ export default {
         if(props.overrideStartsInLabel) {
           return props.overrideStartsInLabel;
         }
-        return props.isAuction ? 'Auction starts in: ' : 'Sale starts in: ';
+        return props.isAuction ? 'Bidding opens in: ' : 'Sale starts in: ';
       }
       if (timerState.value === TIMER_STATE.IN_PROGRESS) {
         if(props.overrideEndsInLabel) {
           return props.overrideEndsInLabel;
         }
-        return 'Ends in: ' || props.label;
+        return `${props.isAuction ? 'Auction' : 'Sale'} ends in: ` || props.label;
       }
       if (timerState.value === TIMER_STATE.DONE) {
         return '';
@@ -88,10 +93,14 @@ export default {
       timerState.value = state;
     }
 
-    startTimer({
-      startDate: props.startDate,
-      endDate: props.endDate,
-    });
+
+    watchEffect(() => {
+      startTimer({
+        startDate: props.startDate,
+        endDate: props.endDate,
+        isAwaitingReserve: props.isAwaitingReserve,
+      });
+    })
 
     return {
       percentage,

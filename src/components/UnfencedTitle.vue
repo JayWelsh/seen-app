@@ -1,13 +1,18 @@
 <template>
-  <div class="title flex items-center fence-wrap" >
-
+  <div class="title flex items-center fence-wrap"
+    :style="{
+      ...(alignment === 'center' && {'justify-content': 'center'}),
+      'width': width ? width : '100%',
+    }"
+  >
     <div
         class="title-text font-title lg:flex-shrink-0 font-bold"
         :class="unshrinkable ? 'flex-shrink-0' : 'flex-shrink'"
         :style="{
-          'max-width': hideBars ? '100%' : '80%',
+          'max-width': maxWidth ? maxWidth : '100%',
           'width': hideBars ? '100%' : 'auto',
           'text-align': alignment,
+          'font-size': fontSize ? fontSize : '48px',
           ...(titleMonospace && {'font-family': 'monospace'})
         }"
     >
@@ -25,6 +30,9 @@ export default {
     color: String, //
     unshrinkable: Boolean,
     titleMonospace: Boolean,
+    fontSize: String,
+    width: String,
+    maxWidth: String,
   },
   computed: {
     alignment: function () {
